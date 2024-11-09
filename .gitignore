@@ -1,0 +1,4 @@
+.env
+wp-content/*
+*.sql
+!create_admin_user.sql

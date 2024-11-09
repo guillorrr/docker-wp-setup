@@ -1,0 +1,74 @@
+services:
+  wordpress:
+    image: wordpress:${WORDPRESS_VERSION:-php8.0-fpm}
+    container_name: ${APP_NAME}-wp
+    volumes:
+      - ./wp-content:/var/www/html/wp-content
+    environment:
+      WORDPRESS_DB_HOST: ${DB_HOST:-db}
+      WORDPRESS_DB_USER: ${DB_USER}
+      WORDPRESS_DB_PASSWORD: ${DB_ROOT_PASSWORD}
+      WORDPRESS_DB_NAME: ${DB_NAME}
+      WORDPRESS_DEBUG: ${WORDPRESS_DEBUG}
+      WORDPRESS_TABLE_PREFIX: ${DB_TABLE_PREFIX}
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_HOME', '${PROTOCOL}://${DOMAIN}' );
+        define( 'WP_SITEURL', '${PROTOCOL}://${DOMAIN}' );
+        define( 'DISABLE_WP_CRON', true );
+        define( 'WP_DEBUG_DISPLAY', ${WORDPRESS_DEBUG_DISPLAY} );
+        define( 'WP_DEBUG_LOG', '/var/www/html/wp-content/wordpress.log' );
+        define( 'FS_DIRECT', true );
+        define( 'ALLOW_UNFILTERED_UPLOADS', true);
+        define( 'WP_ALLOW_MULTISITE', false);
+        define( 'MULTISITE', false);
+    depends_on:
+      - db
+      - phpmyadmin
+    restart: always
+    ports:
+      - '${FORWARD_HTTP_PORT:-80}:80'
+
+  db:
+    image: mariadb:latest
+    container_name: ${APP_NAME}-db
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./dump.sql:/docker-entrypoint-initdb.d/1_dump.sql
+      - ./create_admin_user.sql:/docker-entrypoint-initdb.d/2_create_admin_user.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      TZ: America/Argentina/Buenos_Aires
+    restart: always
+
+  phpmyadmin:
+    depends_on:
+      - db
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: ${APP_NAME}-phpmyadmin
+    restart: always
+    ports:
+      - '${FORWARD_PHPMYADMIN_PORT:-8082}:80'
+    environment:
+      PMA_HOST: ${DB_HOST:-db}
+      PMA_PORT: ${FORWARD_DB_PORT:-3306}:3306
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      UPLOAD_LIMIT: 1G
+
+  chmod:
+    image: wordpress:${WORDPRESS_VERSION:-php8.0-fpm}
+    container_name: ${APP_NAME}-chmod
+    depends_on:
+      - wordpress
+    restart: "on-failure"
+    volumes:
+      - './wp-content:/var/www/html/wp-content'
+    entrypoint: >
+      /bin/sh -c "
+      chmod -R 755 /var/www/html/wp-content;
+      chown -R www-data:www-data /var/www/html/wp-content;
+      exit 0;
+      "
+
+volumes:
+  db_data:
